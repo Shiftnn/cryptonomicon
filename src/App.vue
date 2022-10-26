@@ -194,24 +194,26 @@
 </template>
 
 <script>
+// [x] 11. данные капают даже когда тикер не выбран | 5+
+// [x] 2. При удалении тикера данные продолжают поступать до перезагрузки | 5+
+// [x] 6. Наличие в состоянии ЗАВИСИМЫХ ДАННЫХ | Критичность: 5+
+// [ ] 4. Запросы напрямую внутри компонента (???) | Критичность: 5
+// [x] 5. Обработка ошибок API | Критичность: 5 ?
+// [x] 3. Количество запросов | Критичность: 4
+// [x] 8. При удалении тикера не изменяется localStorage | Критичность: 4
+// [x] 1. Одинаковый код в watch | Критичность: 3 ?
+// [ ] 9. localStorage и анонимные вкладки | Критичность: 3 ?
+// [x] 7. График ужасно выглядит если будет много цен | Критичность: 2
+// [ ] 10. Магические строки и числа (URL, 5000 миллисекунд задержки, ключ локал стораджа, количество на странице) |  Критичность: 1 ?
+
+// ? - проблема ли ?
+
+// Параллельно
+// [x] График сломан если везде одинаковые значения
+
+import { subscribeToTickerOnWs, unSubscribeFromTickerOnWs } from "./Api";
+
 export default {
-  // [x] 11. данные капают даже когда тикер не выбран | 5+
-  // [x] 2. При удалении тикера данные продолжают поступать до перезагрузки | 5+
-  // [x] 6. Наличие в состоянии ЗАВИСИМЫХ ДАННЫХ | Критичность: 5+
-  // [ ] 4. Запросы напрямую внутри компонента (???) | Критичность: 5
-  // [x] 5. Обработка ошибок API | Критичность: 5 ? проблема чела со стрима, а я хорош
-  // [x] 3. Количество запросов | Критичность: 4
-  // [x] 8. При удалении тикера не изменяется localStorage | Критичность: 4
-  // [x] 1. Одинаковый код в watch | Критичность: 3 ?
-  // [ ] 9. localStorage и анонимные вкладки | Критичность: 3 ?
-  // [x] 7. График ужасно выглядит если будет много цен | Критичность: 2
-  // [ ] 10. Магические строки и числа (URL, 5000 миллисекунд задержки, ключ локал стораджа, количество на странице) |  Критичность: 1 ?
-
-  // ? - проблема ли ?
-
-  // Параллельно
-  // [x] График сломан если везде одинаковые значения
-
   async created() {
     const pennies = await fetch(
       `https://min-api.cryptocompare.com/data/all/coinlist?summary=true`
@@ -232,15 +234,12 @@ export default {
         const key = JSON.parse(localStorage.getItem(keys[i]));
         this.originalTickets.unshift(key);
         this.tickers.unshift(key);
-        const f = await fetch(
-          `https://min-api.cryptocompare.com/data/price?fsym=${keys[i]}&tsyms=USD&api_key=98205db68d3404a9abf3835989c2fa211682663096a066a2df58758a59fa8b65`
+        subscribeToTickerOnWs(keys[i], (newPrice) =>
+          this.updateTicker(keys[i], newPrice)
         );
-        const data = await f.json();
-        this.tickers.find((t) => t.name === keys[i]).price =
-          data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2);
-        this.graph.push(data.USD);
       }
     }
+
     this.curPage = JSON.parse(localStorage.getItem("page"));
     this.pageSetter();
     if (localStorage.getItem("filter")) {
@@ -260,11 +259,11 @@ export default {
       ticker: "", // input ticker
       tickers: [], // all tickers
       selectedTicker: null, // ticker's graph
-      graph: [], // calculated graphic of sells by last 5 seconds
-      exist: null, // current ticker repeat
-      tokenArr: [], // pushed tokens on created
+      graph: [], // calculated graphic of sells by last n seconds
+      exist: null, // if current ticker repeats
+      tokenArr: [], // pushs tokens on created
       corTokens: [], // pushed tokens on created but names only
-      theFour: [], // four tickets that shows below the add input
+      theFour: [], // four tickets that shows below the input ticker
       filterInput: "", // the filtration input
       originalTickets: [], // duplicated array of tickers for the filter
       curPage: [0, 6], // elements of tickers on cur page
@@ -292,7 +291,6 @@ export default {
     normalizedGraph() {
       if (this.graph.length > 37) {
         this.graph.splice(0, 4);
-        console.log(this.graph.length);
         // 38
       }
     },
@@ -368,7 +366,6 @@ export default {
               } else {
                 this.theFour.unshift({ cur });
                 this.theFour = this.theFour.slice(0, 4);
-                console.log(this.theFour);
               }
             }
           }
@@ -378,24 +375,15 @@ export default {
   },
 
   methods: {
-    tickerPriceUpdater(ticker) {
-      let interval = setInterval(async () => {
-        const f = await fetch(
-          `https://min-api.cryptocompare.com/data/price?fsym=${ticker.name}&tsyms=USD&api_key=98205db68d3404a9abf3835989c2fa211682663096a066a2df58758a59fa8b65`
-        );
-        const data = await f.json();
-
-        if (this.tickers.find((t) => t.name === ticker.name) === undefined) {
-          clearInterval(interval);
-        } else {
-          this.tickers.find((t) => t.name === ticker.name).price =
-            data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2);
-          this.graph.push(data.USD);
-        }
-        if (this.selectedTicker === null) {
-          clearInterval(interval);
-        }
-      }, 1000);
+    updateTicker(tickerName, price) {
+      this.tickers
+        .filter((t) => t.name === tickerName)
+        .forEach((t) => {
+          if (t === this.selectedTicker) {
+            this.graph.push(price);
+          }
+          t.price = price;
+        });
     },
 
     pageSetter() {
@@ -445,8 +433,6 @@ export default {
 
     select(ticker) {
       this.selectedTicker = ticker;
-      this.tickerPriceUpdater(ticker);
-      console.log(ticker);
     },
 
     handleDelete(ticketToRemove) {
@@ -458,6 +444,7 @@ export default {
       if (this.selectedTicker == ticketToRemove) {
         this.selectedTicker = null;
       }
+      unSubscribeFromTickerOnWs(ticketToRemove.name);
     },
 
     similarSearch() {
@@ -474,6 +461,9 @@ export default {
           `${currentTicker.name}`,
           JSON.stringify(currentTicker)
         );
+        subscribeToTickerOnWs(currentTicker.name, (newPrice) =>
+          this.updateTicker(currentTicker.name, newPrice)
+        );
 
         if (
           this.tickers.find((t) => t.name === currentTicker.name) !== undefined
@@ -485,7 +475,6 @@ export default {
           this.originalTickets.push(currentTicker);
           this.ticker = "";
         }
-        this.tickerPriceUpdater(currentTicker);
       } else {
         return;
       }
