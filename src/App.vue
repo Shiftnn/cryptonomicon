@@ -89,7 +89,7 @@
             </button>
             <button
               @click="nextPage()"
-              v-if="originalTickets.length > curPage[1]"
+              v-if="originalTickets.length > curPage[0]"
               type="button"
               class="my-4 inline-flex items-center py-2 px-4 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-full text-white bg-gray-600 hover:bg-gray-700 transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
             >
@@ -240,7 +240,10 @@ export default {
       }
     }
 
-    this.curPage = JSON.parse(localStorage.getItem("page"));
+    if (localStorage.getItem("page") !== null) {
+      this.curPage = JSON.parse(localStorage.getItem("page"));
+    }
+
     this.pageSetter();
     if (localStorage.getItem("filter")) {
       this.filterInput = JSON.parse(
@@ -267,6 +270,8 @@ export default {
       filterInput: "", // the filtration input
       originalTickets: [], // duplicated array of tickers for the filter
       curPage: [0, 6], // elements of tickers on cur page
+      first: 0,
+      second: 6,
     };
   },
 
