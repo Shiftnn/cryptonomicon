@@ -89,7 +89,7 @@
             </button>
             <button
               @click="nextPage()"
-              v-if="originalTickets.length > curPage[0]"
+              v-if="originalTickets.length > curPage[1]"
               type="button"
               class="my-4 inline-flex items-center py-2 px-4 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-full text-white bg-gray-600 hover:bg-gray-700 transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
             >
@@ -215,6 +215,11 @@ import { subscribeToTickerOnWs, unSubscribeFromTickerOnWs } from "./Api";
 
 export default {
   async created() {
+    this.BroadCastChannel.addEventListener("message", (channelData) => {
+      const { NAME: name, PRICE: price } = channelData.data;
+
+      this.tickers.find((t) => t.name === name).price = price;
+    });
     const pennies = await fetch(
       `https://min-api.cryptocompare.com/data/all/coinlist?summary=true`
     );
@@ -234,9 +239,15 @@ export default {
         const key = JSON.parse(localStorage.getItem(keys[i]));
         this.originalTickets.unshift(key);
         this.tickers.unshift(key);
-        subscribeToTickerOnWs(keys[i], (newPrice) =>
-          this.updateTicker(keys[i], newPrice)
-        );
+        setTimeout(() => {
+          subscribeToTickerOnWs(keys[i], (newPrice) => {
+            this.BroadCastChannel.postMessage({
+              NAME: keys[i],
+              PRICE: newPrice,
+            });
+            this.updateTicker(keys[i], newPrice);
+          });
+        }, 2000);
       }
     }
 
@@ -270,8 +281,7 @@ export default {
       filterInput: "", // the filtration input
       originalTickets: [], // duplicated array of tickers for the filter
       curPage: [0, 6], // elements of tickers on cur page
-      first: 0,
-      second: 6,
+      BroadCastChannel: new BroadcastChannel("ws"),
     };
   },
 
