@@ -215,11 +215,7 @@ import { subscribeToTickerOnWs, unSubscribeFromTickerOnWs } from "./Api";
 
 export default {
   async created() {
-    this.BroadCastChannel.addEventListener("message", (channelData) => {
-      const { NAME: name, PRICE: price } = channelData.data;
-
-      this.tickers.find((t) => t.name === name).price = price;
-    });
+    this.BCMessageHandler;
     const pennies = await fetch(
       `https://min-api.cryptocompare.com/data/all/coinlist?summary=true`
     );
@@ -295,6 +291,16 @@ export default {
           (price) => 5 + ((price - minValue) * 95) / (maxValue - minValue)
         );
       }
+    },
+    BCMessageHandler() {
+      return this.BroadCastChannel.addEventListener(
+        "message",
+        (channelData) => {
+          const { NAME: name, PRICE: price } = channelData.data;
+
+          this.tickers.find((t) => t.name === name).price = price;
+        }
+      );
     },
   },
 
@@ -391,11 +397,7 @@ export default {
         NAME: tickerName,
         PRICE: price,
       });
-      this.BroadCastChannel.addEventListener("message", (channelData) => {
-        const { NAME: name, PRICE: price } = channelData.data;
-
-        this.tickers.find((t) => t.name === name).price = price;
-      });
+      this.BCMessageHandler;
       this.tickers
         .filter((t) => t.name === tickerName)
         .forEach((t) => {
