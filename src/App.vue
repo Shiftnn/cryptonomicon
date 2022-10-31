@@ -241,10 +241,6 @@ export default {
         this.tickers.unshift(key);
         setTimeout(() => {
           subscribeToTickerOnWs(keys[i], (newPrice) => {
-            this.BroadCastChannel.postMessage({
-              NAME: keys[i],
-              PRICE: newPrice,
-            });
             this.updateTicker(keys[i], newPrice);
           });
         }, 2000);
@@ -391,6 +387,15 @@ export default {
 
   methods: {
     updateTicker(tickerName, price) {
+      this.BroadCastChannel.postMessage({
+        NAME: tickerName,
+        PRICE: price,
+      });
+      this.BroadCastChannel.addEventListener("message", (channelData) => {
+        const { NAME: name, PRICE: price } = channelData.data;
+
+        this.tickers.find((t) => t.name === name).price = price;
+      });
       this.tickers
         .filter((t) => t.name === tickerName)
         .forEach((t) => {
