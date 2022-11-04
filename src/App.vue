@@ -116,6 +116,7 @@
               @click="select(t)"
               :class="selectedTicker === t ? 'border-4' : ''"
               class="bg-white overflow-hidden shadow rounded-lg border-purple-800 border-solid cursor-pointer"
+              :style="t.isValid === 'no' ? 'background-color:#ff000047' : ''"
             >
               <div class="px-4 py-5 sm:p-6 text-center">
                 <dt class="text-sm font-medium text-gray-500 truncate">
@@ -128,7 +129,7 @@
               <div class="w-full border-t border-gray-200"></div>
               <button
                 @click.stop="handleDelete(t)"
-                class="flex items-center justify-center font-medium w-full bg-gray-100 px-4 py-4 sm:px-6 text-md text-gray-500 hover:text-gray-600 hover:bg-gray-200 hover:opacity-20 transition-all focus:outline-none"
+                class="flex items-center justify-center font-medium w-full bg-gray-100 px-4 py-4 sm:px-6 text-md text-gray-500 hover:text-gray-600 hover:bg-gray-200 transition-all focus:outline-none"
               >
                 <svg
                   class="h-5 w-5"
@@ -237,7 +238,19 @@ export default {
         this.tickers.unshift(key);
         setTimeout(() => {
           subscribeToTickerOnWs(keys[i], (newPrice) => {
-            this.updateTicker(keys[i], newPrice);
+            if (newPrice == "invalidSub") {
+              console.log("NAN", newPrice, keys[i]);
+              this.tickers.find((t) => t.name === keys[i]).isValid = "no";
+              this.BroadCastChannel.postMessage({
+                NAME: keys[i],
+                PRICE: newPrice,
+              });
+            }
+            if (typeof newPrice !== "string") {
+              this.updateTicker(keys[i], newPrice);
+              console.log(newPrice, "veryfied", keys[i]);
+              console.log(typeof newPrice);
+            }
           });
         }, 2000);
       }
@@ -297,8 +310,11 @@ export default {
         "message",
         (channelData) => {
           const { NAME: name, PRICE: price } = channelData.data;
-
-          this.tickers.find((t) => t.name === name).price = price;
+          if (price == "invalidSub") {
+            this.tickers.find((t) => t.name === name).isValid = "no";
+          } else {
+            this.tickers.find((t) => t.name === name).price = price;
+          }
         }
       );
     },
@@ -315,6 +331,10 @@ export default {
     tickers() {
       if (this.tickers == 0 && this.curPage[0] > 0) {
         this.curPage = [this.curPage[0] - 6, this.curPage[1] - 6];
+        this.pageSetter();
+        localStorage.removeItem("page");
+        localStorage.setItem("page", JSON.stringify(this.curPage));
+      } else if (this.tickers.length > 0 && this.curPage[0] == 0) {
         this.pageSetter();
         localStorage.removeItem("page");
         localStorage.setItem("page", JSON.stringify(this.curPage));
@@ -404,7 +424,9 @@ export default {
           if (t === this.selectedTicker) {
             this.graph.push(price);
           }
-          t.price = price;
+          if (price !== undefined) {
+            t.price = price;
+          }
         });
     },
 
@@ -483,9 +505,15 @@ export default {
           `${currentTicker.name}`,
           JSON.stringify(currentTicker)
         );
-        subscribeToTickerOnWs(currentTicker.name, (newPrice) =>
-          this.updateTicker(currentTicker.name, newPrice)
-        );
+        subscribeToTickerOnWs(currentTicker.name, (newPrice) => {
+          if (newPrice == "invalidSub") {
+            console.log("NAN", newPrice, currentTicker.name);
+            this.tickers.find((t) => t.name === currentTicker.name).isValid =
+              "no";
+          } else {
+            this.updateTicker(currentTicker.name, newPrice);
+          }
+        });
 
         if (
           this.tickers.find((t) => t.name === currentTicker.name) !== undefined

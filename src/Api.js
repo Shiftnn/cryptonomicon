@@ -1,12 +1,17 @@
+// socket requirments
 const api_key =
   "98205db68d3404a9abf3835989c2fa211682663096a066a2df58758a59fa8b65";
+
 const socket = new WebSocket(
   `wss://streamer.cryptocompare.com/v2?api_key=${api_key}`
 );
 
+// variables
 const aggregateIndex = "5";
 let tickersHandlers = new Map();
 
+//socket logic
+//  ↓sub add
 function sendOnWS(ticker) {
   const messageToSend = JSON.stringify({
     action: "SubAdd",
@@ -14,6 +19,8 @@ function sendOnWS(ticker) {
   });
   socket.send(messageToSend);
 }
+
+//  ↓sub remove
 function removeFromWs(ticker) {
   const messageToSend = JSON.stringify({
     action: "SubRemove",
@@ -22,17 +29,21 @@ function removeFromWs(ticker) {
   socket.send(messageToSend);
 }
 
+//  ↓wait for socket to open => send sub
 const subscribeToTicker = (ticker) => {
   socket.addEventListener("open", sendOnWS(ticker), { once: true });
-  if (socket.readyState === socket.OPEN) {
-    sendOnWS(ticker);
-    return;
-  }
+  // if (socket.readyState === socket.OPEN) {
+  //   sendOnWS(ticker);
+  //   return;
+  // }
 };
+
+//  ↓sub remove compact reuse
 const unSubscribeFromTicker = (ticker) => {
   removeFromWs(ticker);
 };
 
+//  ↓socket's message data handler
 socket.addEventListener("message", (socketData) => {
   const {
     TYPE: type,
@@ -44,7 +55,6 @@ socket.addEventListener("message", (socketData) => {
     return;
   }
 
-  console.log(name, price, type);
   let ticker = tickersHandlers.get(name) ?? [];
   ticker.forEach((fn) => fn(price));
 });
@@ -53,7 +63,24 @@ export const subscribeToTickerOnWs = (ticker, cb) => {
   let subscribers = tickersHandlers.get(ticker) ?? [];
   tickersHandlers.set(ticker, [...subscribers, cb]);
   subscribeToTicker(ticker);
+
+  // ↓checks if ticker is valid to work with
+  if (socket.readyState === open) {
+    socket.send({
+      action: "SubAdd",
+      subs: [`5~CCCAGG~${ticker}~USD`],
+    }),
+      { once: true };
+  }
+  socket.addEventListener("message", (socketData) => {
+    const { TYPE: type, PARAMETER: par } = JSON.parse(socketData.data);
+    if (type === "500" && par === `5~CCCAGG~${ticker}~USD`) {
+      const tickers = tickersHandlers.get(ticker);
+      tickers.forEach((fn) => fn("invalidSub"));
+    }
+  });
 };
+
 export const unSubscribeFromTickerOnWs = (ticker) => {
   tickersHandlers.delete(ticker);
   unSubscribeFromTicker(ticker);
