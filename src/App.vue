@@ -248,8 +248,8 @@ export default {
             }
             if (typeof newPrice !== "string") {
               this.updateTicker(keys[i], newPrice);
-              console.log(newPrice, "veryfied", keys[i]);
-              console.log(typeof newPrice);
+              // console.log(newPrice, "veryfied", keys[i]);
+              // console.log(typeof newPrice);
             }
           });
         }, 2000);
@@ -265,7 +265,6 @@ export default {
       this.filterInput = JSON.parse(
         localStorage.getItem("filter")
       ).toLowerCase();
-      this.existTicksFilter();
     } else {
       return false;
     }
@@ -358,23 +357,20 @@ export default {
           for (let c = 0; inputWord.length > c; c++) {
             // transfer the character of cur word
             let word = words[i].name.split("");
-            if (spl[c] === word[c]) {
-              chars += 1;
-              if (chars === spl.length) {
-                this.tickers.push(words[i]);
+            setTimeout(() => {
+              if (spl[c] === word[c]) {
+                chars += 1;
+                chars === spl.length ? this.tickers.push(words[i]) : false;
               }
-            } else {
-              false;
-            }
+            }, 100);
           }
         }
       } else {
         this.tickers = [];
-        setTimeout(() => {
-          for (let i = 0; this.originalTickets.length > i; i++) {
-            this.tickers.unshift(this.originalTickets[i]);
-          }
-        }, 100);
+        // setTimeout(() => {}, 100);
+        for (let i = 0; this.originalTickets.length > i; i++) {
+          this.tickers.unshift(this.originalTickets[i]);
+        }
         this.filterLSRemover;
       }
     },
