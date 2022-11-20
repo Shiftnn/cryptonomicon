@@ -154,12 +154,16 @@
         <h3 class="text-lg leading-6 font-medium text-gray-900 my-8">
           {{ selectedTicker.name }} - USD
         </h3>
-        <div class="flex items-end border-gray-600 border-b border-l h-64">
+        <div
+          class="flex items-end border-gray-600 border-b border-l h-64"
+          ref="graph"
+        >
           <div
             v-for="bar of normalizedGraph"
             :key="bar"
             :style="{ height: `${bar}%` }"
             class="bg-purple-800 border w-10"
+            ref="graphElement"
           ></div>
         </div>
         <button
@@ -198,7 +202,7 @@
 // [x] 11. данные капают даже когда тикер не выбран | 5+
 // [x] 2. При удалении тикера данные продолжают поступать до перезагрузки | 5+
 // [x] 6. Наличие в состоянии ЗАВИСИМЫХ ДАННЫХ | Критичность: 5+
-// [ ] 4. Запросы напрямую внутри компонента (???) | Критичность: 5
+// [x] 4. Запросы напрямую внутри компонента (???) | Критичность: 5
 // [x] 5. Обработка ошибок API | Критичность: 5 ?
 // [x] 3. Количество запросов | Критичность: 4
 // [x] 8. При удалении тикера не изменяется localStorage | Критичность: 4
@@ -239,7 +243,6 @@ export default {
         setTimeout(() => {
           subscribeToTickerOnWs(keys[i], (newPrice) => {
             if (newPrice == "invalidSub") {
-              console.log("NAN", newPrice, keys[i]);
               this.tickers.find((t) => t.name === keys[i]).isValid = "no";
               this.BroadCastChannel.postMessage({
                 NAME: keys[i],
@@ -248,8 +251,6 @@ export default {
             }
             if (typeof newPrice !== "string") {
               this.updateTicker(keys[i], newPrice);
-              // console.log(newPrice, "veryfied", keys[i]);
-              // console.log(typeof newPrice);
             }
           });
         }, 2000);
@@ -270,6 +271,24 @@ export default {
     }
   },
 
+  mounted() {
+    window.addEventListener("resize", () => {
+      this.calculateMaxGraphElements();
+      while (this.graph.length > this.maxGraphElements) {
+        this.graph = this.graph.slice(4, -1);
+      }
+    });
+  },
+
+  beforeUnmount() {
+    window.removeEventListener("resize", () => {
+      this.calculateMaxGraphElements();
+      while (this.graph.length > this.maxGraphElements) {
+        this.graph = this.graph.slice(3, -1);
+      }
+    });
+  },
+
   name: "App",
 
   data() {
@@ -286,6 +305,8 @@ export default {
       originalTickets: [], // duplicated array of tickers for the filter
       curPage: [0, 6], // elements of tickers on cur page
       BroadCastChannel: new BroadcastChannel("ws"),
+      maxGraphElements: 1,
+      maxGraphElementWidth: 0,
     };
   },
 
@@ -314,6 +335,12 @@ export default {
           } else {
             this.tickers.find((t) => t.name === name).price = price;
           }
+
+          if (this.selectedTicker) {
+            if (this.selectedTicker.name === name) {
+              this.graph.push(price);
+            }
+          }
         }
       );
     },
@@ -321,9 +348,8 @@ export default {
 
   watch: {
     normalizedGraph() {
-      if (this.graph.length > 37) {
-        this.graph.splice(0, 4);
-        // 38
+      while (this.graph.length > this.maxGraphElements) {
+        this.graph = this.graph.slice(3, -1);
       }
     },
 
@@ -362,12 +388,11 @@ export default {
                 chars += 1;
                 chars === spl.length ? this.tickers.push(words[i]) : false;
               }
-            }, 100);
+            }, 1);
           }
         }
       } else {
         this.tickers = [];
-        // setTimeout(() => {}, 100);
         for (let i = 0; this.originalTickets.length > i; i++) {
           this.tickers.unshift(this.originalTickets[i]);
         }
@@ -408,6 +433,19 @@ export default {
   },
 
   methods: {
+    calculateMaxGraphElements() {
+      if (this.selectedTicker) {
+        this.maxGraphElements = Math.floor(
+          this.$refs.graph.clientWidth / this.maxGraphElementWidth
+        );
+        console.log(this.$refs.graphElement[0].clientWidth);
+      }
+    },
+
+    calculateGraphElementWidth() {
+      this.maxGraphElementWidth = this.$refs.graphElement[0].clientWidth;
+    },
+
     updateTicker(tickerName, price) {
       this.BroadCastChannel.postMessage({
         NAME: tickerName,
@@ -419,6 +457,9 @@ export default {
         .forEach((t) => {
           if (t === this.selectedTicker) {
             this.graph.push(price);
+            if (this.maxGraphElements !== 0) {
+              this.calculateGraphElementWidth();
+            }
           }
           if (price !== undefined) {
             t.price = price;
@@ -472,6 +513,9 @@ export default {
     },
 
     select(ticker) {
+      setTimeout(() => {
+        this.calculateMaxGraphElements();
+      }, 10000);
       this.selectedTicker = ticker;
     },
 
@@ -503,7 +547,6 @@ export default {
         );
         subscribeToTickerOnWs(currentTicker.name, (newPrice) => {
           if (newPrice == "invalidSub") {
-            console.log("NAN", newPrice, currentTicker.name);
             this.tickers.find((t) => t.name === currentTicker.name).isValid =
               "no";
           } else {

@@ -15,7 +15,7 @@ let tickersHandlers = new Map();
 function sendOnWS(ticker) {
   const messageToSend = JSON.stringify({
     action: "SubAdd",
-    subs: [`5~CCCAGG~${ticker}~USD`],
+    subs: [`5~CCCAGG~${ticker}~USDT`],
   });
   socket.send(messageToSend);
 }
@@ -24,7 +24,7 @@ function sendOnWS(ticker) {
 function removeFromWs(ticker) {
   const messageToSend = JSON.stringify({
     action: "SubRemove",
-    subs: [`5~CCCAGG~${ticker}~USD`],
+    subs: [`5~CCCAGG~${ticker}~USDT`],
   });
   socket.send(messageToSend);
 }
@@ -39,14 +39,13 @@ const subscribeToTicker = (ticker) => {
 };
 
 // ↓to convert invalidSub via BTC to USD
-// const reconvertor = (ticker) => {
-//   const messageToSend = JSON.stringify({
-//     action: "SubAdd",
-//     subs: [`0~Coinbase~${ticker}~BTC`],
-//   });
-//   socket.send(messageToSend);
-//   ticker;
-// };
+const reconvertor = (ticker) => {
+  const messageToSend = JSON.stringify({
+    action: "SubAdd",
+    subs: [`5~CCCAGG~${ticker}~BTC`],
+  });
+  socket.send(messageToSend);
+};
 
 //  ↓sub remove compact reuse
 const unSubscribeFromTicker = (ticker) => {
@@ -55,16 +54,17 @@ const unSubscribeFromTicker = (ticker) => {
 
 //  ↓socket's message data handler
 socket.addEventListener("message", (socketData) => {
-  console.log(JSON.parse(socketData.data));
   const {
     TYPE: type,
     PRICE: price,
     FROMSYMBOL: name,
   } = JSON.parse(socketData.data);
+  // if (type !== aggregateIndex || price === undefined) {
+  //   return;
+  // }
   if (type !== aggregateIndex || price === undefined) {
     return;
   }
-
   let ticker = tickersHandlers.get(name) ?? [];
   ticker.forEach((fn) => fn(price));
 });
@@ -78,7 +78,7 @@ export const subscribeToTickerOnWs = (ticker, cb) => {
   socket.addEventListener("open", (ticker) => {
     socket.send({
       action: "SubAdd",
-      subs: [`5~CCCAGG~${ticker}~USD`],
+      subs: [`5~CCCAGG~${ticker}~USDT`],
     }),
       { once: true };
   });
@@ -91,12 +91,12 @@ export const subscribeToTickerOnWs = (ticker, cb) => {
     } = JSON.parse(socketData.data);
     if (
       type === "500" &&
-      par === `5~CCCAGG~${ticker}~USD` &&
+      par === `5~CCCAGG~${ticker}~USDT` &&
       msg !== subActivated
     ) {
       const tickers = tickersHandlers.get(ticker);
       tickers.forEach((fn) => fn("invalidSub"));
-      // reconvertor(ticker);
+      reconvertor(ticker);
     } else {
       return;
     }
