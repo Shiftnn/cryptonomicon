@@ -3,79 +3,8 @@
     <div class="container">
       <div class="w-full my-4"></div>
       <section>
-        <div class="flex">
-          <div class="max-w-xs">
-            <label for="wallet" class="block text-sm font-medium text-gray-700"
-              >Тикер</label
-            >
-            <div class="mt-1 relative rounded-md shadow-md">
-              <input
-                @keyup="similarSearch()"
-                v-model="ticker"
-                @keyup.enter="add"
-                type="text"
-                name="wallet"
-                id="wallet"
-                class="block w-full pr-10 border-gray-300 text-gray-900 focus:outline-none focus:ring-gray-500 focus:border-gray-500 sm:text-sm rounded-md"
-                placeholder="Например DOGE"
-                autocomplete="off"
-              />
-            </div>
-            <div
-              style="
-                margin-top: 5px;
-                display: flex;
-                gap: 5px;
-                cursos: pointer;
-                width: fit-content;
-              "
-              v-if="ticker"
-            >
-              <div
-                @click="selectedSimilarTick(token)"
-                style="
-                  background: #ced3dc;
-                  height: 20px;
-                  min-width: 50px;
-                  width: fit-content;
-                  max-width: 200px;
-                  border-radius: 10px;
-                  color: black;
-                  display: flex;
-                  align-items: center;
-                  justify-content: center;
-                  padding: 0px 10px;
-                  cursor: pointer;
-                "
-                v-for="token in theFour"
-                :key="token"
-              >
-                {{ token.cur }}
-              </div>
-            </div>
-            <h1 style="color: red" v-if="exist">Такой тикер уже существует</h1>
-          </div>
-        </div>
-        <button
-          @click="add"
-          type="button"
-          class="my-4 inline-flex items-center py-2 px-4 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-full text-white bg-gray-600 hover:bg-gray-700 transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
-        >
-          <!-- Heroicon name: solid/mail -->
-          <svg
-            class="-ml-0.5 mr-2 h-6 w-6"
-            xmlns="http://www.w3.org/2000/svg"
-            width="30"
-            height="30"
-            viewBox="0 0 24 24"
-            fill="#ffffff"
-          >
-            <path
-              d="M13 7h-2v4H7v2h4v4h2v-4h4v-2h-4V7zm-1-5C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"
-            ></path>
-          </svg>
-          Добавить
-        </button>
+        <add-ticker @tickerToAdd="this.add" :tickersFromParent="this.tickers" />
+
         <hr class="w-full border-t border-gray-600 my-4" />
         <div>
           <div>
@@ -150,7 +79,7 @@
         </dl>
         <hr class="w-full border-t border-gray-600 my-4" />
       </template>
-      <section class="relative" v-if="selectedTicker">
+      <!-- <section class="relative" v-if="selectedTicker">
         <h3 class="text-lg leading-6 font-medium text-gray-900 my-8">
           {{ selectedTicker.name }} - USD
         </h3>
@@ -193,7 +122,14 @@
             </g>
           </svg>
         </button>
-      </section>
+      </section> -->
+      <graph-section
+        v-if="selectedTicker"
+        :tickerToDraw="this.selectedTicker"
+        :graphElements="this.graph"
+        @closeGraph="selectedTicker = null"
+        ref="graph"
+      />
     </div>
   </div>
 </template>
@@ -217,18 +153,38 @@
 // [x] График сломан если везде одинаковые значения
 
 import { subscribeToTickerOnWs, unSubscribeFromTickerOnWs } from "./Api";
+import AddTicker from "./components/AddTicker.vue";
+import GraphSection from "./components/GraphSection.vue";
 
 export default {
+  name: "App",
+
+  components: {
+    AddTicker,
+    GraphSection,
+  },
+
+  data() {
+    return {
+      ticker: "", // input ticker
+      tickers: [], // all tickers
+      selectedTicker: null, // ticker's graph
+      graph: [], // calculated graphic of sells by last n seconds
+      exist: null, // if current ticker repeats
+      tokenArr: [], // pushs tokens on created
+      corTokens: [], // pushed tokens on created but names only
+      theFour: [], // four tickets that shows below the input ticker
+      filterInput: "", // the filtration input
+      originalTickets: [], // duplicated array of tickers for the filter
+      curPage: [0, 6], // elements of tickers on cur page
+      BroadCastChannel: new BroadcastChannel("ws"),
+      maxGraphElements: 1,
+      maxGraphElementWidth: 0,
+    };
+  },
+
   async created() {
     this.BCMessageHandler;
-    const pennies = await fetch(
-      `https://min-api.cryptocompare.com/data/all/coinlist?summary=true`
-    );
-    const jsoned = await pennies.json();
-    const data = await jsoned.Data;
-    for (let key in data) {
-      this.tokenArr.push(key);
-    }
     const keys = [];
 
     for (let i = 0; localStorage.length > i; i++) {
@@ -240,17 +196,21 @@ export default {
         const key = JSON.parse(localStorage.getItem(keys[i]));
         this.originalTickets.unshift(key);
         this.tickers.unshift(key);
+
         setTimeout(() => {
           subscribeToTickerOnWs(keys[i], (newPrice) => {
-            if (newPrice == "invalidSub") {
-              this.tickers.find((t) => t.name === keys[i]).isValid = "no";
+            if (newPrice === "invalidSub") {
+              this.originalTickets.find((t) => t.name === keys[i]).isValid =
+                "no";
               this.BroadCastChannel.postMessage({
                 NAME: keys[i],
                 PRICE: newPrice,
               });
             }
-            if (typeof newPrice !== "string") {
+            if (newPrice !== "invalidSub") {
               this.updateTicker(keys[i], newPrice);
+              this.originalTickets.find((t) => t.name === keys[i]).isValid =
+                "yes";
             }
           });
         }, 2000);
@@ -289,41 +249,9 @@ export default {
     });
   },
 
-  name: "App",
-
-  data() {
-    return {
-      ticker: "", // input ticker
-      tickers: [], // all tickers
-      selectedTicker: null, // ticker's graph
-      graph: [], // calculated graphic of sells by last n seconds
-      exist: null, // if current ticker repeats
-      tokenArr: [], // pushs tokens on created
-      corTokens: [], // pushed tokens on created but names only
-      theFour: [], // four tickets that shows below the input ticker
-      filterInput: "", // the filtration input
-      originalTickets: [], // duplicated array of tickers for the filter
-      curPage: [0, 6], // elements of tickers on cur page
-      BroadCastChannel: new BroadcastChannel("ws"),
-      maxGraphElements: 1,
-      maxGraphElementWidth: 0,
-    };
-  },
-
   computed: {
     filterLSRemover() {
       return localStorage.removeItem("filter");
-    },
-    normalizedGraph() {
-      let maxValue = Math.max(...this.graph);
-      let minValue = Math.min(...this.graph);
-      if (maxValue === minValue) {
-        return this.graph.map(() => 50);
-      } else {
-        return this.graph.map(
-          (price) => 5 + ((price - minValue) * 95) / (maxValue - minValue)
-        );
-      }
     },
     BCMessageHandler() {
       return this.BroadCastChannel.addEventListener(
@@ -334,6 +262,7 @@ export default {
             this.tickers.find((t) => t.name === name).isValid = "no";
           } else {
             this.tickers.find((t) => t.name === name).price = price;
+            this.tickers.find((t) => t.name === name).isValid = "yes";
           }
 
           if (this.selectedTicker) {
@@ -438,7 +367,6 @@ export default {
         this.maxGraphElements = Math.floor(
           this.$refs.graph.clientWidth / this.maxGraphElementWidth
         );
-        console.log(this.$refs.graphElement[0].clientWidth);
       }
     },
 
@@ -457,9 +385,6 @@ export default {
         .forEach((t) => {
           if (t === this.selectedTicker) {
             this.graph.push(price);
-            if (this.maxGraphElements !== 0) {
-              this.calculateGraphElementWidth();
-            }
           }
           if (price !== undefined) {
             t.price = price;
@@ -504,18 +429,7 @@ export default {
       this.filterInput = "";
     },
 
-    selectedSimilarTick(name) {
-      this.ticker = name.cur;
-      this.add();
-      setTimeout(() => {
-        this.theFour = [name];
-      }, 1);
-    },
-
     select(ticker) {
-      setTimeout(() => {
-        this.calculateMaxGraphElements();
-      }, 10000);
       this.selectedTicker = ticker;
     },
 
@@ -535,21 +449,20 @@ export default {
       this.exist = null;
     },
 
-    add() {
-      if (this.ticker) {
+    add(ticker) {
+      if (ticker) {
         const currentTicker = {
-          name: this.ticker.toUpperCase(),
+          name: ticker.toUpperCase(),
           price: "",
         };
-        localStorage.setItem(
-          `${currentTicker.name}`,
-          JSON.stringify(currentTicker)
-        );
+
         subscribeToTickerOnWs(currentTicker.name, (newPrice) => {
           if (newPrice == "invalidSub") {
             this.tickers.find((t) => t.name === currentTicker.name).isValid =
               "no";
           } else {
+            this.tickers.find((t) => t.name === currentTicker.name).isValid =
+              "yes";
             this.updateTicker(currentTicker.name, newPrice);
           }
         });
@@ -559,10 +472,13 @@ export default {
         ) {
           this.exist = true;
         } else {
+          localStorage.setItem(
+            `${currentTicker.name}`,
+            JSON.stringify(currentTicker)
+          );
           this.exist = false;
           this.tickers.push(currentTicker);
           this.originalTickets.push(currentTicker);
-          this.ticker = "";
         }
       } else {
         return;
